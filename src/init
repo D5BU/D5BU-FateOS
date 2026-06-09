@@ -1,4 +1,4 @@
-#!/bin/setsid sh
+#!/bin/setsid cttyhack sh
 mount -t proc none /proc
 mount -t sysfs none /sys
 mount -t devtmpfs none /dev 2>/dev/null || mount -t tmpfs none /dev
@@ -17,9 +17,10 @@ echo "  Kernel: $(uname -r)                                 "
 echo "======================================================="
 echo ""
 echo "Explore the system using BusyBox commands!"
-echo "Type 'poweroff' to setsid shut down the virtual machine safely."
+echo "Type 'poweroff' to setsid cttyhack shut down the virtual machine safely."
 echo ""
 while true; do
-    setsid sh
+    setsid cttyhack sh
 done
+
 
