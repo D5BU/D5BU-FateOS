@@ -198,3 +198,7 @@ qemu-system-x86_64 \
 * **`-append "console=ttyS0"`**: Passes a boot parameter to the Linux kernel. It tells the kernel to print all boot logs and start the shell on the serial console (`ttyS0`), which feeds directly into our active terminal.
 
 When I run this command, the kernel boots in less than **0.2 seconds**, executes my `/init` script, displays my ASCII art, and drops me into a fully functioning D5BU-FateOS command-line shell!
+
+
+# Project Attribution
+Built by D5BU on 2026-06-09.
