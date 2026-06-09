@@ -22,3 +22,5 @@ sudo mknod -m 666 "${ROOTFS}/dev/null" c 1 3
 cp "${WORKSPACE_DIR}/src/init" "${ROOTFS}/init"
 chmod +x "${ROOTFS}/init"
 cp "${WORKSPACE_DIR}/src/welcome.txt" "${ROOTFS}/welcome.txt"
+cd "${ROOTFS}"
+find . -print0 | cpio --null -ov --format=newc | gzip -9 > "${WORKSPACE_DIR}/dist/initramfs.cpio.gz"
