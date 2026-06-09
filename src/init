@@ -10,3 +10,9 @@ if [ -f /welcome.txt ]; then
 else
     echo "Welcome to FATEOS!"
 fi
+echo ""
+echo "======================================================="
+echo "  FATEOS V1 (Ultra-Lightweight Edition)               "
+echo "  Kernel: $(uname -r)                                 "
+echo "======================================================="
+echo ""
