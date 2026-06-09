@@ -1,1 +1,3 @@
 # D5BU-FateOS: Custom Linux Distribution
+
+Documenting the development...
