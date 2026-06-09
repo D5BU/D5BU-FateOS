@@ -31,7 +31,7 @@ echo "Explore the system using BusyBox commands!"
 echo "Type 'poweroff' to shut down the virtual machine safely."
 echo ""
 
-# 4. Spawn an interactive shell
+# 4. Spawn interactive BusyBox shell
 # We use the setsid and cttyhack utilities from BusyBox.
 # - cttyhack: Detects the active console (e.g., serial console ttyS0) and connects it to the shell.
 # - setsid: Spawns the shell in a new session (enabling job control like Ctrl+C).
@@ -41,5 +41,6 @@ while true; do
     echo "Shell exited. Restarting shell in 1 second..."
     sleep 1
 done
+
 
 
