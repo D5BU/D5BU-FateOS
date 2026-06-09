@@ -4,3 +4,6 @@
  |   __|  /  /_\  \   |  |     |   __|  |  |  |  |  \   \    
  |  |    /  _____  \  |  |     |  |____ |  `--'  |..-`   |   
  |__|   /__/     \__\ |__|     |_______| \______/ \_____/    
+
+                  Welcome to FATE Operating System!
+          Built from scratch for systems learning & exploring.
