@@ -19,3 +19,6 @@ echo ""
 echo "Explore the system using BusyBox commands!"
 echo "Type 'poweroff' to shut down the virtual machine safely."
 echo ""
+while true; do
+    sh
+done
