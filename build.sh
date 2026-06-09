@@ -21,3 +21,4 @@ sudo mknod -m 600 "${ROOTFS}/dev/console" c 5 1
 sudo mknod -m 666 "${ROOTFS}/dev/null" c 1 3
 cp "${WORKSPACE_DIR}/src/init" "${ROOTFS}/init"
 chmod +x "${ROOTFS}/init"
+cp "${WORKSPACE_DIR}/src/welcome.txt" "${ROOTFS}/welcome.txt"
