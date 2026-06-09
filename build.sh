@@ -19,3 +19,5 @@ cp -a "${BUILD_DIR}/busybox-1.36.1/_install/." "${ROOTFS}/"
 mkdir -p "${ROOTFS}"/{proc,sys,dev,etc,tmp}
 sudo mknod -m 600 "${ROOTFS}/dev/console" c 5 1
 sudo mknod -m 666 "${ROOTFS}/dev/null" c 1 3
+cp "${WORKSPACE_DIR}/src/init" "${ROOTFS}/init"
+chmod +x "${ROOTFS}/init"
