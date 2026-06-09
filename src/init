@@ -5,3 +5,8 @@ mount -t devtmpfs none /dev 2>/dev/null || mount -t tmpfs none /dev
 mkdir -p /dev/pts
 mount -t devpts none /dev/pts
 clear
+if [ -f /welcome.txt ]; then
+    cat /welcome.txt
+else
+    echo "Welcome to FATEOS!"
+fi
