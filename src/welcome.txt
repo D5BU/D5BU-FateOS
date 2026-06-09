@@ -5,5 +5,5 @@
  |  |    /  _____  \  |  |     |  |____ |  `--'  |..-`   |   
  |__|   /__/     \__\ |__|     |_______| \______/ \_____/    
 
-                  Welcome to FATE Operating System!
+                  Welcome to D5BU-FateOS!
           Built from scratch for systems learning & exploring.
