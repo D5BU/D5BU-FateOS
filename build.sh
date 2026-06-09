@@ -13,3 +13,6 @@ make defconfig
 sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
 make -j$(nproc)
 make install
+ROOTFS="${BUILD_DIR}/rootfs"
+mkdir -p "${ROOTFS}"
+cp -a "${BUILD_DIR}/busybox-1.36.1/_install/." "${ROOTFS}/"
