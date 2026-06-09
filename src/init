@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# 1. Mount virtual filesystems
+# 1. Mount virtual filesystems (proc, sys, dev)
 # Linux processes and utilities require /proc, /sys, and /dev to interact with the kernel and hardware.
 # - /proc: Contains process information and kernel state (e.g. cpuinfo, meminfo).
 # - /sys: Allows configuring kernel parameters and hardware devices.
@@ -41,3 +41,4 @@ while true; do
     echo "Shell exited. Restarting shell in 1 second..."
     sleep 1
 done
+
