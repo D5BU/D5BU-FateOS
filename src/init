@@ -1,17 +1,26 @@
-#!/bin/setsid cttyhack sh
-    echo "Shell exited. Restarting shell in 1 second..."
-    sleep 1
+#!/bin/sh
+
+# 1. Mount virtual filesystems
+# Linux processes and utilities require /proc, /sys, and /dev to interact with the kernel and hardware.
+# - /proc: Contains process information and kernel state (e.g. cpuinfo, meminfo).
+# - /sys: Allows configuring kernel parameters and hardware devices.
+# - /dev: Contains device nodes (e.g. disk devices, console interfaces).
 mount -t proc none /proc
 mount -t sysfs none /sys
 mount -t devtmpfs none /dev 2>/dev/null || mount -t tmpfs none /dev
+
+# 2. Setup pseudo-terminals (for console support)
 mkdir -p /dev/pts
 mount -t devpts none /dev/pts
+
+# 3. Clear screen and display welcome message
 clear
 if [ -f /welcome.txt ]; then
     cat /welcome.txt
 else
     echo "Welcome to FATEOS!"
 fi
+
 echo ""
 echo "======================================================="
 echo "  FATEOS V1 (Ultra-Lightweight Edition)               "
@@ -19,15 +28,16 @@ echo "  Kernel: $(uname -r)                                 "
 echo "======================================================="
 echo ""
 echo "Explore the system using BusyBox commands!"
-echo "Type 'poweroff' to setsid cttyhack sh
-    echo "Shell exited. Restarting shell in 1 second..."
-    sleep 1ut down the virtual machine safely."
+echo "Type 'poweroff' to shut down the virtual machine safely."
 echo ""
+
+# 4. Spawn an interactive shell
+# We use the setsid and cttyhack utilities from BusyBox.
+# - cttyhack: Detects the active console (e.g., serial console ttyS0) and connects it to the shell.
+# - setsid: Spawns the shell in a new session (enabling job control like Ctrl+C).
+# We run this in an infinite loop so if the shell exits, it restarts rather than causing a kernel panic.
 while true; do
     setsid cttyhack sh
     echo "Shell exited. Restarting shell in 1 second..."
     sleep 1
 done
-
-
-
