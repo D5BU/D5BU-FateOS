@@ -115,13 +115,29 @@ fi
 echo "[+] Found kernel: ${KERNEL_PATH}"
 cp "${KERNEL_PATH}" "${WORKSPACE_DIR}/dist/vmlinuz"
 
+# 7. Assemble and Build the Bootable ISO
+echo "[-] Setting up ISO directory layout..."
+ISO_DIR="${BUILD_DIR}/iso"
+rm -rf "${ISO_DIR}"
+mkdir -p "${ISO_DIR}/boot/grub"
+
+# Copy files into the ISO structure
+cp "${WORKSPACE_DIR}/dist/vmlinuz" "${ISO_DIR}/boot/vmlinuz"
+cp "${WORKSPACE_DIR}/dist/initramfs.cpio.gz" "${ISO_DIR}/boot/initramfs.cpio.gz"
+cp "${WORKSPACE_DIR}/config/grub.cfg" "${ISO_DIR}/boot/grub/grub.cfg"
+
+echo "[-] Compiling bootable ISO with GRUB bootloader..."
+grub-mkrescue -o "${WORKSPACE_DIR}/dist/d5bu-fateos.iso" "${ISO_DIR}"
+
 echo "============================================="
 echo "  Build Completed Successfully!"
 echo "  Files created in: ${WORKSPACE_DIR}/dist"
 echo "  - vmlinuz (Linux Kernel)"
 echo "  - initramfs.cpio.gz (Custom Root Filesystem)"
+echo "  - d5bu-fateos.iso (Bootable ISO Image)"
 echo "============================================="
 echo ""
-echo "To boot D5BU-FateOS inside QEMU now, run:"
-echo "qemu-system-x86_64 -kernel dist/vmlinuz -initrd dist/initramfs.cpio.gz -nographic -append \"console=ttyS0\""
+echo "To boot D5BU-FateOS using the bootable ISO in QEMU, run:"
+echo "qemu-system-x86_64 -cdrom dist/d5bu-fateos.iso -nographic"
 echo ""
+
