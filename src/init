@@ -93,12 +93,24 @@ run_shell() {
     fi
 }
 
-# 6. Spawn interactive BusyBox shells on both VGA and Serial consoles
-echo "[-] Spawning interactive shell on VGA console (/dev/tty1)..."
-run_shell /dev/tty1 &
+# 6. Start the custom Framebuffer GUI and spawn serial CLI shell
+if [ -c /dev/fb0 ]; then
+    echo "[-] Starting website-themed FateOS GUI..."
+    (
+        while true; do
+            fateos-gui
+            echo "GUI exited. Restarting in 1 second..."
+            sleep 1
+        done
+    ) &
+else
+    echo "[!] Framebuffer device /dev/fb0 not found. Cannot launch GUI."
+    echo "[-] Spawning fallback shell on VGA console (/dev/tty1)..."
+    run_shell /dev/tty1 &
+fi
 
-echo "[-] Spawning interactive shell on serial console (/dev/ttyS0)..."
+echo "[-] Spawning interactive CLI shell on serial console (/dev/ttyS0)..."
 run_shell /dev/ttyS0 &
 
-# Wait for background shell processes to keep init (PID 1) alive
+# Wait for background processes to keep init (PID 1) alive
 wait

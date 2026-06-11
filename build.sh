@@ -100,6 +100,10 @@ chmod +x "${ROOTFS}/init"
 # Copy the welcome banner
 cp "${WORKSPACE_DIR}/src/welcome.txt" "${ROOTFS}/welcome.txt"
 
+# Compile the custom Framebuffer GUI statically
+echo "[-] Compiling custom Framebuffer GUI statically..."
+gcc -static -O3 -Wall "${WORKSPACE_DIR}/src/gui.c" -lm -o "${ROOTFS}/bin/fateos-gui"
+
 # Copy the DHCP helper script
 echo "[-] Copying DHCP configuration helper..."
 cp "${WORKSPACE_DIR}/src/udhcpc.script" "${ROOTFS}/etc/udhcpc.script"
