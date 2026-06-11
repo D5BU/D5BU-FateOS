@@ -62,31 +62,43 @@ else
     echo "[!] No network interface card detected."
 fi
 
-# 5. Clear screen and display welcome message
-clear
-if [ -f /welcome.txt ]; then
-    cat /welcome.txt
-else
-    echo "Welcome to FATEOS!"
-fi
+# 5. Define multi-console shell spawner
+run_shell() {
+    tty_dev="$1"
+    if [ -c "$tty_dev" ]; then
+        while true; do
+            # Display welcome message on this specific terminal
+            echo "" > "$tty_dev"
+            if [ -f /welcome.txt ]; then
+                cat /welcome.txt > "$tty_dev"
+            else
+                echo "Welcome to FATEOS!" > "$tty_dev"
+            fi
+            echo "" > "$tty_dev"
+            echo "=======================================================" > "$tty_dev"
+            echo "  D5BU-FateOS V1 (Ultra-Lightweight Edition)          " > "$tty_dev"
+            echo "  Kernel: $(uname -r)                                 " > "$tty_dev"
+            echo "  Terminal: $(basename "$tty_dev")                    " > "$tty_dev"
+            echo "=======================================================" > "$tty_dev"
+            echo "" > "$tty_dev"
+            echo "Explore the system using BusyBox commands!" > "$tty_dev"
+            echo "Type 'poweroff -f' to shut down the virtual machine safely." > "$tty_dev"
+            echo "" > "$tty_dev"
+            
+            # Spawn interactive shell with job control (Ctrl+C)
+            setsid sh -c "exec sh <$tty_dev >$tty_dev 2>&1"
+            echo "Shell on $tty_dev exited. Restarting in 1 second..." > "$tty_dev"
+            sleep 1
+        done
+    fi
+}
 
-echo ""
-echo "======================================================="
-echo "  D5BU-FateOS V1 (Ultra-Lightweight Edition)          "
-echo "  Kernel: $(uname -r)                                 "
-echo "======================================================="
-echo ""
-echo "Explore the system using BusyBox commands!"
-echo "Type 'poweroff' to shut down the virtual machine safely."
-echo ""
+# 6. Spawn interactive BusyBox shells on both VGA and Serial consoles
+echo "[-] Spawning interactive shell on VGA console (/dev/tty1)..."
+run_shell /dev/tty1 &
 
-# 6. Spawn interactive BusyBox shell
-# We use the setsid and cttyhack utilities from BusyBox.
-# - cttyhack: Detects the active console (e.g., serial console ttyS0) and connects it to the shell.
-# - setsid: Spawns the shell in a new session (enabling job control like Ctrl+C).
-# We run this in an infinite loop so if the shell exits, it restarts rather than causing a kernel panic.
-while true; do
-    setsid cttyhack sh
-    echo "Shell exited. Restarting shell in 1 second..."
-    sleep 1
-done
+echo "[-] Spawning interactive shell on serial console (/dev/ttyS0)..."
+run_shell /dev/ttyS0 &
+
+# Wait for background shell processes to keep init (PID 1) alive
+wait
