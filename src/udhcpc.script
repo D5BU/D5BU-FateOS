@@ -1,0 +1,37 @@
+#!/bin/sh
+# =====================================================================
+# D5BU-FateOS DHCP Configuration Helper
+# Handled by udhcpc (BusyBox DHCP Client) to apply router settings.
+# =====================================================================
+
+# udhcpc calls this script with $1 set to "deconfig", "bound", or "renew"
+# and passes interface parameters as environment variables.
+
+case "$1" in
+    deconfig)
+        echo "[udhcpc] Deconfiguring interface $interface..."
+        ifconfig $interface 0.0.0.0
+        ;;
+    bound|renew)
+        echo "[udhcpc] Bound interface $interface to IP: $ip"
+        ifconfig $interface $ip netmask ${subnet:-255.255.255.0} up
+        
+        # 1. Configure default gateway routing
+        if [ -n "$router" ]; then
+            echo "[udhcpc] Setting default gateway to: $router"
+            # Remove any existing default routes first to prevent routing conflicts
+            while route del default gw 0.0.0.0 dev $interface 2>/dev/null; do :; done
+            route add default gw $router dev $interface
+        fi
+        
+        # 2. Configure DNS Nameservers (for domain resolution)
+        if [ -n "$dns" ]; then
+            echo "[udhcpc] Writing DNS configurations..."
+            echo -n "" > /etc/resolv.conf
+            for nameserver in $dns; do
+                echo "nameserver $nameserver" >> /etc/resolv.conf
+            done
+        fi
+        ;;
+esac
+exit 0

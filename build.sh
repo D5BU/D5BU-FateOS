@@ -14,6 +14,14 @@ BUILD_DIR="/tmp/fateos-build"
 BUSYBOX_VER="1.36.1"
 BUSYBOX_URL="https://busybox.net/downloads/busybox-${BUSYBOX_VER}.tar.bz2"
 
+# Locate the precompiled Linux kernel
+KERNEL_PATH=$(find /boot -name "vmlinuz-*" | head -n 1)
+if [ -z "${KERNEL_PATH}" ]; then
+    echo "[!] Error: No precompiled Linux kernel found in /boot."
+    echo "    Make sure 'linux-image-amd64' package is installed."
+    exit 1
+fi
+
 echo "============================================="
 echo "  Starting D5BU-FateOS Build Process"
 echo "============================================="
@@ -92,6 +100,40 @@ chmod +x "${ROOTFS}/init"
 # Copy the welcome banner
 cp "${WORKSPACE_DIR}/src/welcome.txt" "${ROOTFS}/welcome.txt"
 
+# Copy the DHCP helper script
+echo "[-] Copying DHCP configuration helper..."
+cp "${WORKSPACE_DIR}/src/udhcpc.script" "${ROOTFS}/etc/udhcpc.script"
+chmod +x "${ROOTFS}/etc/udhcpc.script"
+
+# Copy and decompress network kernel modules
+echo "[-] Extracting Kernel version..."
+KERNEL_VER=$(basename "${KERNEL_PATH}" | sed 's/vmlinuz-//')
+echo "[+] Detected Kernel version: ${KERNEL_VER}"
+
+echo "[-] Copying network driver modules..."
+MODULES_DEST="${ROOTFS}/lib/modules"
+mkdir -p "${MODULES_DEST}"
+
+# List of modules to copy
+MODULES=(
+    "kernel/drivers/net/ethernet/intel/e1000/e1000.ko.xz"
+    "kernel/net/core/failover.ko.xz"
+    "kernel/drivers/net/net_failover.ko.xz"
+    "kernel/drivers/net/virtio_net.ko.xz"
+)
+
+for mod in "${MODULES[@]}"; do
+    SRC_PATH="/lib/modules/${KERNEL_VER}/${mod}"
+    if [ -f "${SRC_PATH}" ]; then
+        echo "    Copying $(basename "${SRC_PATH}")..."
+        cp "${SRC_PATH}" "${MODULES_DEST}/"
+        # Decompress the module so that insmod can load it easily
+        xz -d "${MODULES_DEST}/$(basename "${SRC_PATH}")"
+    else
+        echo "[!] Warning: Module ${SRC_PATH} not found!"
+    fi
+done
+
 # 5. Pack the Root Filesystem into initramfs.cpio.gz
 echo "[-] Packing rootfs into compressed initramfs..."
 cd "${ROOTFS}"
@@ -101,17 +143,8 @@ find . -print0 | cpio --null -ov --format=newc | gzip -9 > "${BUILD_DIR}/initram
 # Copy the finished initramfs to the workspace
 cp "${BUILD_DIR}/initramfs.cpio.gz" "${WORKSPACE_DIR}/dist/initramfs.cpio.gz"
 
-# 6. Locate and copy the precompiled Linux kernel
+# 6. Copy the precompiled Linux kernel
 echo "[-] Copying precompiled Linux kernel from Debian host..."
-# Find the installed kernel image in /boot/ (installed via apt linux-image-amd64)
-KERNEL_PATH=$(find /boot -name "vmlinuz-*" | head -n 1)
-
-if [ -z "${KERNEL_PATH}" ]; then
-    echo "[!] Error: No precompiled Linux kernel found in /boot."
-    echo "    Make sure 'linux-image-amd64' package is installed."
-    exit 1
-fi
-
 echo "[+] Found kernel: ${KERNEL_PATH}"
 cp "${KERNEL_PATH}" "${WORKSPACE_DIR}/dist/vmlinuz"
 

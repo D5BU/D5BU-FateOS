@@ -13,7 +13,56 @@ mount -t devtmpfs none /dev 2>/dev/null || mount -t tmpfs none /dev
 mkdir -p /dev/pts
 mount -t devpts none /dev/pts
 
-# 3. Clear screen and display welcome message
+# 3. Load Network Driver Modules
+echo "[-] Loading network driver modules..."
+if [ -d /lib/modules ]; then
+    # load virtio_net dependencies
+    if [ -f /lib/modules/failover.ko ]; then
+        echo "    Loading failover..."
+        insmod /lib/modules/failover.ko
+    fi
+    if [ -f /lib/modules/net_failover.ko ]; then
+        echo "    Loading net_failover..."
+        insmod /lib/modules/net_failover.ko
+    fi
+    # load drivers
+    if [ -f /lib/modules/virtio_net.ko ]; then
+        echo "    Loading virtio_net..."
+        insmod /lib/modules/virtio_net.ko
+    fi
+    if [ -f /lib/modules/e1000.ko ]; then
+        echo "    Loading e1000..."
+        insmod /lib/modules/e1000.ko
+    fi
+else
+    echo "[!] /lib/modules directory not found!"
+fi
+
+# 4. Setup Network Interfaces
+# - Bring up the loopback interface (needed for local loopback connections).
+# - Scan /sys/class/net/ to find the first physical ethernet card and request IP via DHCP in background.
+echo "[-] Initializing network loopback..."
+ifconfig lo 127.0.0.1 up
+
+NET_INT=""
+for dev in /sys/class/net/*; do
+    name=$(basename "$dev")
+    if [ "$name" != "lo" ] && [ "$name" != "*" ]; then
+        NET_INT="$name"
+        break
+    fi
+done
+
+if [ -n "$NET_INT" ]; then
+    echo "[+] Found network interface: $NET_INT"
+    echo "[-] Requesting IP address via DHCP in the background..."
+    # -i: interface, -s: configuration script, -b: run in background if no lease immediately
+    udhcpc -i "$NET_INT" -s /etc/udhcpc.script -b &
+else
+    echo "[!] No network interface card detected."
+fi
+
+# 5. Clear screen and display welcome message
 clear
 if [ -f /welcome.txt ]; then
     cat /welcome.txt
@@ -31,7 +80,7 @@ echo "Explore the system using BusyBox commands!"
 echo "Type 'poweroff' to shut down the virtual machine safely."
 echo ""
 
-# 4. Spawn interactive BusyBox shell
+# 6. Spawn interactive BusyBox shell
 # We use the setsid and cttyhack utilities from BusyBox.
 # - cttyhack: Detects the active console (e.g., serial console ttyS0) and connects it to the shell.
 # - setsid: Spawns the shell in a new session (enabling job control like Ctrl+C).

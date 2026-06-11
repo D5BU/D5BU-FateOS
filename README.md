@@ -13,6 +13,7 @@ This repository documents my journey of building **D5BU-FateOS** (D5BU Fate Oper
 5. [Step 4: Assembling and Packaging the Rootfs (initramfs)](#step-4-assembling-and-packaging-the-rootfs-initramfs)
 6. [Step 5: Extracting the Linux Kernel](#step-5-extracting-the-linux-kernel)
 7. [Step 6: Booting D5BU-FateOS in QEMU](#step-6-booting-d5bu-fateos-in-qemu)
+8. [Step 7: Networking & Internet Support](#step-7-networking--internet-support)
 
 ---
 
@@ -199,6 +200,90 @@ qemu-system-x86_64 \
 
 When I run this command, the kernel boots in less than **0.2 seconds**, executes my `/init` script, displays my ASCII art, and drops me into a fully functioning D5BU-FateOS command-line shell!
 
+---
+
+## Step 7: Networking & Internet Support
+
+Once I had a basic shell booting from the ISO, my next goal was to enable network and internet access inside the RAM disk. I wanted the system to auto-detect a network interface, obtain an IP address via DHCP, and ping external servers.
+
+### 1. The Challenge: Modular Kernel Drivers
+When I first ran the custom OS, it printed:
+`[!] No network interface card detected.`
+Although the host kernel (`vmlinuz`) detected the virtual Intel PCI ethernet card, it didn't initialize it. I learned that Linux kernels don't compile every hardware driver directly into the main kernel file (which would make it massive). Instead:
+* Common drivers are built as **Loadable Kernel Modules (LKMs)** with a `.ko` (Kernel Object) extension.
+* They are stored under `/lib/modules/$(uname -r)/` and loaded into RAM on demand.
+* Since our custom initramfs didn't have `/lib/modules/` or any network driver files, the kernel couldn't activate the network card!
+
+### 2. Copying and Decompressing Drivers
+In Debian, kernel modules are compressed using XZ format (`.ko.xz`). Since the standard `insmod` tool in BusyBox requires raw, uncompressed binaries to load modules easily, I updated `build.sh` to extract the drivers from the host, copy them, and decompress them:
+
+```bash
+# copy e1000 (Intel NIC) and virtio-net (virtual NIC) with its dependencies
+MODULES=(
+    "kernel/drivers/net/ethernet/intel/e1000/e1000.ko.xz"
+    "kernel/net/core/failover.ko.xz"
+    "kernel/drivers/net/net_failover.ko.xz"
+    "kernel/drivers/net/virtio_net.ko.xz"
+)
+for mod in "${MODULES[@]}"; do
+    cp "/lib/modules/${KERNEL_VER}/${mod}" "rootfs/lib/modules/"
+    xz -d "rootfs/lib/modules/$(basename ${mod})"
+done
+```
+
+This populates our RAM disk with `e1000.ko` and `virtio_net.ko` under `/lib/modules/`.
+
+### 3. Loading Modules at Boot (init)
+I updated `/init` to dynamically insert the network drivers using `insmod` before executing network scans:
+```bash
+echo "[-] Loading network driver modules..."
+insmod /lib/modules/failover.ko
+insmod /lib/modules/net_failover.ko
+insmod /lib/modules/virtio_net.ko
+insmod /lib/modules/e1000.ko
+```
+Once the modules are loaded, the kernel initializes the network card, creating the interface node `eth0`.
+
+### 4. DHCP & Routing Configuration
+With `eth0` activated, I used BusyBox's `udhcpc` (DHCP client) to request configuration parameters from the network's DHCP server.
+`udhcpc` coordinates with a helper script `/etc/udhcpc.script` which dynamically configures:
+1. **IP Address**: Assigns the leased IP address to the interface:
+   ```bash
+   ifconfig eth0 10.0.2.15 netmask 255.255.255.0 up
+   ```
+2. **Default Gateway**: Deletes any stale routes and adds the virtual router gateway:
+   ```bash
+   route add default gw 10.0.2.2 dev eth0
+   ```
+3. **DNS Resolution**: Populates `/etc/resolv.conf` so names can be translated to IPs:
+   ```bash
+   echo "nameserver 10.0.2.3" > /etc/resolv.conf
+   ```
+
+### 5. Verification
+When booting D5BU-FateOS in QEMU, the system successfully initializes the interface and leases an IP:
+```
+[-] Loading network driver modules...
+[    7.324162] e1000: Intel(R) PRO/1000 Network Driver
+[    7.681516] e1000 0000:00:03.0 eth0: Intel(R) PRO/1000 Network Connection
+[-] Initializing network loopback...
+[+] Found network interface: eth0
+[-] Requesting IP address via DHCP in the background...
+[udhcpc] Bound interface eth0 to IP: 10.0.2.15
+[udhcpc] Setting default gateway to: 10.0.2.2
+[udhcpc] Writing DNS configurations...
+```
+I verified outbound connectivity by running pings inside the shell:
+```bash
+~ # ping -c 4 8.8.8.8
+4 packets transmitted, 4 packets received, 0% packet loss
+
+~ # ping -c 4 google.com
+4 packets transmitted, 4 packets received, 0% packet loss
+```
+Internet, routing, and DNS are fully operational!
+
+---
 
 # Project Attribution
-Built by D5BU on 2026-06-09.
+Built by D5BU on 2026-06-09. Last updated on 2026-06-11.
