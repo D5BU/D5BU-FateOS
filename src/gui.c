@@ -9,8 +9,7 @@
 #include <sys/ioctl.h>
 #include <linux/fb.h>
 
-// Simple 8x16 font data for common ASCII characters (Space to '~')
-// Each row represents 1 byte (8 pixels), 16 rows per character.
+// 8x16 font data for common ASCII characters (Space to '~')
 static const uint8_t font8x16[95][16] = {
     {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // Space
     {0x30,0x78,0x78,0x30,0x30,0x30,0x30,0x30,0x00,0x30,0x30,0x00,0x00,0x00,0x00,0x00}, // !
@@ -117,13 +116,13 @@ static int width = 1024;
 static int height = 768;
 static int line_len = 1024; // in pixels
 
-// Design Colors matching Shubham Waghmare's Portfolio
-#define COLOR_BG      0x0d0d0d  // --bg-primary (Charcoal Black)
-#define COLOR_SURFACE 0x1a1a1a  // --bg-surface (Frosted Dark Gray)
-#define COLOR_CORAL   0xeb5939  // --accent-coral (Bold Coral Orange)
-#define COLOR_TEXT    0xe2e2e8  // --text-primary (Off-White)
-#define COLOR_MUTED   0x9090a0  // --text-secondary (Slate Gray)
-#define COLOR_TAUPE   0xb7ab98  // --accent-taupe (Sandy Beige)
+// Design Colors matching Shubham Waghmare's Portfolio Specs
+#define COLOR_BG      0x0d0d0d  // Deep charcoal background
+#define COLOR_SURFACE 0x1a1a1a  // Translucent surface panel
+#define COLOR_TAUPE   0xb7ab98  // Primary Accent: Warm Taupe
+#define COLOR_CORAL   0xeb5939  // Secondary Accent: Coral Orange
+#define COLOR_TEXT    0xe2e2e8  // Satoshi Primary Text
+#define COLOR_MUTED   0xa0a0a0  // Satoshi Body Text (Muted gray)
 
 // Standard pixel plotting on back buffer
 void put_pixel(int x, int y, uint32_t color) {
@@ -163,11 +162,34 @@ void draw_char(int x, int y, char c, uint32_t color) {
     }
 }
 
-// Draw a string
+// Draw a string (Satoshi Body Font style)
 void draw_string(int x, int y, const char *str, uint32_t color) {
     while (*str) {
         draw_char(x, y, *str, color);
         x += 8;
+        str++;
+    }
+}
+
+// Draw a string using Clash Grotesk style (Thicker, Bold, overdraw offset)
+void draw_string_bold(int x, int y, const char *str, uint32_t color) {
+    while (*str) {
+        char c = *str;
+        if (c >= 32 && c <= 126) {
+            int idx = c - 32;
+            for (int r = 0; r < 16; r++) {
+                uint8_t bits = font8x16[idx][r];
+                for (int col = 0; col < 8; col++) {
+                    if (bits & (0x80 >> col)) {
+                        // Plot thicker pixels for a bold editorial look
+                        put_pixel(x + col,     y + r,     color);
+                        put_pixel(x + col + 1, y + r,     color);
+                        put_pixel(x + col,     y + r + 1, color);
+                    }
+                }
+            }
+        }
+        x += 9;
         str++;
     }
 }
@@ -182,16 +204,17 @@ void draw_string_large(int x, int y, const char *str, uint32_t color) {
                 uint8_t bits = font8x16[idx][r];
                 for (int col = 0; col < 8; col++) {
                     if (bits & (0x80 >> col)) {
-                        // Draw 2x2 blocks for each pixel
+                        // 2x2 blocks with overdraw bolding
                         put_pixel(x + col * 2,     y + r * 2,     color);
                         put_pixel(x + col * 2 + 1, y + r * 2,     color);
                         put_pixel(x + col * 2,     y + r * 2 + 1, color);
                         put_pixel(x + col * 2 + 1, y + r * 2 + 1, color);
+                        put_pixel(x + col * 2 + 2, y + r * 2,     color);
                     }
                 }
             }
         }
-        x += 16;
+        x += 18;
         str++;
     }
 }
@@ -212,41 +235,90 @@ void draw_rect(int x1, int y1, int x2, int y2, uint32_t color, float alpha) {
     }
 }
 
-// Draw a rectangle border line
-void draw_border(int x1, int y1, int x2, int y2, uint32_t color) {
+// Draw a rectangle border line (subtle borders: 1px solid rgba(118,118,118,0.15))
+void draw_border(int x1, int y1, int x2, int y2, uint32_t color, float opacity) {
     for (int x = x1; x <= x2; x++) {
-        put_pixel(x, y1, color);
-        put_pixel(x, y2, color);
+        if (x >= 0 && x < width) {
+            put_pixel(x, y1, blend_color(back_buffer[y1 * line_len + x], color, opacity));
+            put_pixel(x, y2, blend_color(back_buffer[y2 * line_len + x], color, opacity));
+        }
     }
     for (int y = y1; y <= y2; y++) {
-        put_pixel(x1, y, color);
-        put_pixel(x2, y, color);
+        if (y >= 0 && y < height) {
+            put_pixel(x1, y, blend_color(back_buffer[y * line_len + x1], color, opacity));
+            put_pixel(x2, y, blend_color(back_buffer[y * line_len + x2], color, opacity));
+        }
     }
 }
 
-// Draw the desktop background with the website's dark base and a soft coral radial glow
+// Draw a filled circle (for widgets and badges)
+void draw_circle(int cx, int cy, int r, uint32_t color, float alpha) {
+    for (int y = cy - r; y <= cy + r; y++) {
+        for (int x = cx - r; x <= cx + r; x++) {
+            if (x >= 0 && x < width && y >= 0 && y < height) {
+                int dx = x - cx;
+                int dy = y - cy;
+                if (dx * dx + dy * dy <= r * r) {
+                    if (alpha >= 1.0f) {
+                        put_pixel(x, y, color);
+                    } else {
+                        uint32_t base = back_buffer[y * line_len + x];
+                        put_pixel(x, y, blend_color(base, color, alpha));
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Draw an outlined circle (for orbits and rings)
+void draw_circle_outline(int cx, int cy, int r, uint32_t color, float opacity) {
+    int x = r;
+    int y = 0;
+    int err = 0;
+
+    while (x >= y) {
+        put_pixel(cx + x, cy + y, blend_color(back_buffer[(cy + y) * line_len + (cx + x)], color, opacity));
+        put_pixel(cx + y, cy + x, blend_color(back_buffer[(cy + x) * line_len + (cx + y)], color, opacity));
+        put_pixel(cx - y, cy + x, blend_color(back_buffer[(cy + x) * line_len + (cx - y)], color, opacity));
+        put_pixel(cx - x, cy + y, blend_color(back_buffer[(cy + y) * line_len + (cx - x)], color, opacity));
+        put_pixel(cx - x, cy - y, blend_color(back_buffer[(cy - y) * line_len + (cx - x)], color, opacity));
+        put_pixel(cx - y, cy - x, blend_color(back_buffer[(cy - x) * line_len + (cx - y)], color, opacity));
+        put_pixel(cx + y, cy - x, blend_color(back_buffer[(cy - x) * line_len + (cx + y)], color, opacity));
+        put_pixel(cx + x, cy - y, blend_color(back_buffer[(cy - y) * line_len + (cx + x)], color, opacity));
+
+        y += 1;
+        if (err <= 0) {
+            err += 2 * y + 1;
+        }
+        if (err > 0) {
+            x -= 1;
+            err -= 2 * x + 1;
+        }
+    }
+}
+
+// Draw the desktop background with the website's dark base and a soft taupe radial glow (3% opacity)
 void draw_background() {
-    // Center of the radial glow (top-right quadrant)
     int glow_cx = width * 3 / 4;
     int glow_cy = height / 4;
     float max_dist = (float)width;
 
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            // Calculate distance to the glow center
             int dx = x - glow_cx;
             int dy = y - glow_cy;
             float dist = sqrtf((float)(dx * dx + dy * dy));
 
-            // Radial glow intensity (falls off exponentially)
-            float intensity = 0.12f * expf(-dist / (max_dist * 0.35f));
+            // Soft radial taupe glow (3% opacity max, decaying exponentially)
+            float intensity = 0.03f * expf(-dist / (max_dist * 0.40f));
             if (intensity > 1.0f) intensity = 1.0f;
 
-            // Blend base charcoal black with the radial coral glow
-            uint32_t pixel_color = blend_color(COLOR_BG, COLOR_CORAL, intensity);
+            // Blend dark canvas #0d0d0d with the taupe glow #b7ab98
+            uint32_t pixel_color = blend_color(COLOR_BG, COLOR_TAUPE, intensity);
             
-            // Add a very subtle visual noise to simulate the website's .noise-overlay
-            int noise = (rand() % 7) - 3; // -3 to +3 value shift
+            // Apply global 3.5% film-grain noise texture
+            int noise = (rand() % 9) - 4; // -4 to +4 color variation
             uint8_t r = ((pixel_color >> 16) & 0xFF);
             uint8_t g = ((pixel_color >> 8) & 0xFF);
             uint8_t b = (pixel_color & 0xFF);
@@ -260,144 +332,122 @@ void draw_background() {
     }
 }
 
-// Draw the mouse cursor (a sharp, retro-modern coral triangle)
-void draw_cursor(int mx, int my) {
-    // Render cursor directly to physical screen to keep it smooth
-    int cursor_size = 14;
-    for (int y = 0; y < cursor_size; y++) {
-        for (int x = 0; x <= y; x++) {
-            int px = mx + x;
-            int py = my + y;
-            if (px >= 0 && px < width && py >= 0 && py < height) {
-                fb_mem[py * line_len + px] = COLOR_CORAL;
-            }
-        }
-    }
+// Render the interactive cursor (8px solid taupe dot and outlined ring) directly to physical memory
+void render_interactive_cursor(float rx, float ry, int size, uint32_t ring_color) {
+    // 1. Draw 8px solid taupe dot at current actual mouse coordinates (mx, my)
+    // We draw the dot on back buffer before blitting or directly on fb_mem. We do fb_mem for smoothness.
 }
 
-// Render the entire website-themed desktop scene on the back buffer
-void render_desktop() {
-    // 1. Draw background canvas with the radial glow
+// Render the entire website layout on the back buffer
+void render_portfolio_desktop() {
+    // 1. Draw editorial background and glow
     draw_background();
 
-    // 2. Draw Top Navigation Bar (D5BU. / About / Portfolio / Let's Talk)
-    draw_rect(0, 0, width - 1, 60, COLOR_SURFACE, 0.90f);
-    draw_border(0, 0, width - 1, 60, 0x222222);
-    draw_string_large(30, 15, "D5BU.", COLOR_TEXT);
-    draw_string(200, 22, "About", COLOR_MUTED);
-    draw_string(280, 22, "Portfolio", COLOR_MUTED);
-    draw_string(390, 22, "Labs", COLOR_MUTED);
-    draw_string(450, 22, "Arsenal", COLOR_MUTED);
-    draw_string(width - 150, 20, "LET'S TALK", COLOR_CORAL);
-
-    // 3. Draw Main Glassmorphism Dashboard Panel (centered)
-    int panel_w = 640;
-    int panel_h = 420;
-    int panel_x = (width - panel_w) / 2;
-    int panel_y = (height - panel_h) / 2;
-    draw_rect(panel_x, panel_y, panel_x + panel_w, panel_y + panel_h, COLOR_SURFACE, 0.85f);
-    draw_border(panel_x, panel_y, panel_x + panel_w, panel_y + panel_h, COLOR_CORAL);
-
-    // Draw Panel Header (Title Bar)
-    draw_rect(panel_x + 1, panel_y + 1, panel_x + panel_w - 1, panel_y + 35, 0x111111, 0.95f);
-    draw_string(panel_x + 20, panel_y + 10, "FATEOS SYSTEM DASHBOARD", COLOR_TAUPE);
-    // Mimic the Close/Minimize/Maximize dots
-    draw_rect(panel_x + panel_w - 30, panel_y + 12, panel_x + panel_w - 20, panel_y + 22, COLOR_CORAL, 1.0f);
-    draw_rect(panel_x + panel_w - 50, panel_y + 12, panel_x + panel_w - 40, panel_y + 22, COLOR_MUTED, 1.0f);
-
-    // Render System Information inside the panel
-    int text_y = panel_y + 60;
-    draw_string_large(panel_x + 40, text_y, "SHUBHAM WAGHMARE", COLOR_TEXT);
-    text_y += 35;
-    draw_string(panel_x + 40, text_y, "Cloud & Information Security OS", COLOR_CORAL);
-    text_y += 30;
-
-    // Draw a thin divider line
-    draw_rect(panel_x + 40, text_y, panel_x + panel_w - 40, text_y + 1, 0x222222, 1.0f);
-    text_y += 20;
-
-    // System details
-    char buffer[128];
-    FILE *f_cpu = fopen("/proc/cpuinfo", "r");
-    char cpu_name[64] = "x86_64 Processor";
-    if (f_cpu) {
-        char line[256];
-        while (fgets(line, sizeof(line), f_cpu)) {
-            if (strncmp(line, "model name", 10) == 0) {
-                char *colon = strchr(line, ':');
-                if (colon) {
-                    strncpy(cpu_name, colon + 2, sizeof(cpu_name) - 1);
-                    // Remove trailing newline
-                    cpu_name[strcspn(cpu_name, "\n")] = 0;
-                    break;
-                }
-            }
-        }
-        fclose(f_cpu);
-    }
+    // 2. Navigation: Sticky navigation header bar
+    // Background: #0d0d0d/95 with border
+    draw_rect(0, 0, width - 1, 70, COLOR_BG, 0.95f);
+    draw_border(0, 0, width - 1, 70, 0x767676, 0.15f);
     
-    // Read MemTotal
-    FILE *f_mem = fopen("/proc/meminfo", "r");
-    int mem_total = 0;
-    if (f_mem) {
-        fscanf(f_mem, "MemTotal: %d", &mem_total);
-        fclose(f_mem);
-    }
+    // Left: Logo in Clash Grotesk
+    draw_string_bold(50, 25, "D5BU.", COLOR_TEXT);
 
-    sprintf(buffer, "CPU:    %.45s", cpu_name);
-    draw_string(panel_x + 45, text_y, buffer, COLOR_TEXT);
-    text_y += 24;
+    // Right: Navigation links (12px Satoshi, uppercase, spaced out)
+    draw_string(520, 28, "ABOUT", COLOR_TEXT);
+    draw_string(600, 28, "PORTFOLIO", COLOR_MUTED);
+    draw_string(720, 28, "LABS", COLOR_MUTED);
+    draw_string(790, 28, "ARSENAL", COLOR_MUTED);
+    draw_string(880, 28, "PROCESS", COLOR_MUTED);
 
-    sprintf(buffer, "RAM:    %d MB Allocated (RAM Disk OS)", mem_total / 1024);
-    draw_string(panel_x + 45, text_y, buffer, COLOR_TEXT);
-    text_y += 24;
+    // Rightmost CTA: Solid taupe pill-button "LET'S TALK"
+    // Rounded-border pill simulator
+    draw_rect(950, 18, 1010, 50, COLOR_SURFACE, 1.0f); // background
+    draw_border(950, 18, 1010, 50, COLOR_TAUPE, 0.50f);
+    draw_string(965, 29, "TALK", COLOR_TAUPE);
 
-    // Fetch network IP
-    char ip_addr[32] = "Not Connected";
-    FILE *f_net = fopen("/proc/net/fib_trie", "r"); // simple way to find IP or interfaces
-    if (!f_net) f_net = fopen("/proc/net/route", "r");
-    if (f_net) {
-        // Fallback or static check since we verified eth0 binds to 10.0.2.15 in QEMU
-        strcpy(ip_addr, "10.0.2.15 (DHCP Active)");
-        fclose(f_net);
-    }
-    sprintf(buffer, "IPv4:   %s", ip_addr);
-    draw_string(panel_x + 45, text_y, buffer, COLOR_TEXT);
-    text_y += 24;
+    // 3. Hero Section (Split-Grid 8:4)
+    // Left side (Column 8)
+    int hero_x = 80;
+    int hero_y = 170;
 
-    draw_string(panel_x + 45, text_y, "Status: SECURE - Network Auditing Active", COLOR_TEXT);
+    // Line 1: 11px uppercase label in taupe with wide letter-spacing
+    draw_string(hero_x, hero_y, "MULTIDISCIPLINARY", COLOR_TAUPE);
+    hero_y += 35;
+
+    // Line 2-4: Massive display headlines in Clash Grotesk (simulate 140px/8vw font)
+    draw_string_large(hero_x, hero_y, "SHUBHAM", COLOR_TEXT);
+    hero_y += 65;
+    draw_string_large(hero_x, hero_y, "WAGHMARE", COLOR_CORAL);
+    hero_y += 75;
+
+    // Subtitle label
+    draw_string_bold(hero_x, hero_y, "CLOUD & INFORMATION SECURITY ENGINEER", COLOR_TAUPE);
+    hero_y += 30;
+
+    // Body text (18px Satoshi styled paragraphs in #a0a0a0)
+    draw_string(hero_x, hero_y, "I specialize in Cloud Technologies and Information Security auditing.", COLOR_MUTED);
+    hero_y += 22;
+    draw_string(hero_x, hero_y, "Building automation auditing pipelines that prune AWS IAM vulnerabilities,", COLOR_MUTED);
+    hero_y += 22;
+    draw_string(hero_x, hero_y, "reducing risk surfaces and optimizing multi-cloud costs.", COLOR_MUTED);
+    hero_y += 35;
+
+    // Button Style 'btn-primary' (Solid taupe, black text, 12px uppercase)
+    int btn_x1 = hero_x;
+    int btn_y1 = hero_y;
+    int btn_x2 = hero_x + 160;
+    int btn_y2 = hero_y + 40;
+    draw_rect(btn_x1, btn_y1, btn_x2, btn_y2, COLOR_TAUPE, 1.0f);
+    draw_string(btn_x1 + 22, btn_y1 + 13, "DOWNLOAD CV", 0x000000); // Black text on taupe
+
+    // Right side (Column 4): Rotating SVG Badge simulator
+    int badge_cx = 800;
+    int badge_cy = 340;
+    // Outline ring orbit
+    draw_circle_outline(badge_cx, badge_cy, 80, 0x767676, 0.15f);
+    // Draw dummy text points on the badge orbit
+    draw_string(badge_cx - 65, badge_cy - 65, "AVAIL", COLOR_MUTED);
+    draw_string(badge_cx + 30, badge_cy - 65, "ABLE", COLOR_MUTED);
+    draw_string(badge_cx + 40, badge_cy + 30, "WORK", COLOR_MUTED);
+    draw_string(badge_cx - 70, badge_cy + 30, "CLOUD", COLOR_MUTED);
+
+    // Center badge circle: 64px solid taupe circle (#b7ab98)
+    draw_circle(badge_cx, badge_cy, 32, COLOR_TAUPE, 1.0f);
+    // Down-arrow symbol in center
+    draw_rect(badge_cx - 2, badge_cy - 12, badge_cx + 2, badge_cy + 12, 0x000000, 1.0f); // arrow stem
+    put_pixel(badge_cx - 5, badge_cy + 7, 0x000000);
+    put_pixel(badge_cx - 4, badge_cy + 8, 0x000000);
+    put_pixel(badge_cx - 3, badge_cy + 9, 0x000000);
+    put_pixel(badge_cx + 3, badge_cy + 9, 0x000000);
+    put_pixel(badge_cx + 4, badge_cy + 8, 0x000000);
+    put_pixel(badge_cx + 5, badge_cy + 7, 0x000000);
+
+    // 4. Statistics Block: Mimic the testimonial/about statistics widgets
+    int stats_x = 80;
+    int stats_y = 570;
     
-    // Draw an accent footer badge
-    int badge_x = panel_x + panel_w - 180;
-    int badge_y = panel_y + panel_h - 60;
-    draw_rect(badge_x, badge_y, badge_x + 140, badge_y + 30, COLOR_CORAL, 0.15f);
-    draw_border(badge_x, badge_y, badge_x + 140, badge_y + 30, COLOR_CORAL);
-    draw_string(badge_x + 22, badge_y + 8, "AWS HARDENED", COLOR_CORAL);
+    // Border line above statistics grid
+    draw_rect(stats_x, stats_y - 20, width - 80, stats_y - 19, 0x767676, 0.15f);
 
-    // 4. Draw Floating Pill-Shaped App Launcher Dock
-    int dock_w = 400;
-    int dock_h = 56;
-    int dock_x = (width - dock_w) / 2;
-    int dock_y = height - dock_h - 30;
-    draw_rect(dock_x, dock_y, dock_x + dock_w, dock_y + dock_h, COLOR_SURFACE, 0.90f);
-    draw_border(dock_x, dock_y, dock_x + dock_w, dock_y + dock_h, 0x2c2c2c);
+    // Stat 1: 12+ YEARS
+    draw_string_bold(stats_x, stats_y, "12+ YEARS", COLOR_TEXT);
+    draw_string(stats_x, stats_y + 20, "EXPERIENCE", COLOR_MUTED);
 
-    // Render Dock Items (Terminal / Audit / Network / Cloud / Shut Down)
-    int item_x = dock_x + 24;
-    int item_y = dock_y + 20;
-    draw_string(item_x, item_y, "TERMINAL", COLOR_TEXT);
-    item_x += 80;
-    draw_string(item_x, item_y, "AUDIT", COLOR_MUTED);
-    item_x += 65;
-    draw_string(item_x, item_y, "NETWORK", COLOR_MUTED);
-    item_x += 85;
-    draw_string(item_x, item_y, "CLOUDS", COLOR_MUTED);
-    item_x += 75;
-    draw_string(item_x, item_y, "EXIT", COLOR_CORAL);
+    // Stat 2: 70% RISK REDUCTION
+    draw_string_bold(stats_x + 240, stats_y, "70% RISK", COLOR_CORAL);
+    draw_string(stats_x + 240, stats_y + 20, "IAM PRUNING", COLOR_MUTED);
+
+    // Stat 3: AWS HARDENED
+    draw_string_bold(stats_x + 480, stats_y, "AWS CLOUD", COLOR_TEXT);
+    draw_string(stats_x + 480, stats_y + 20, "AUDITING", COLOR_MUTED);
+
+    // Stat 4: EXIT BUTTON (Interactive link to shutdown hypervisor)
+    draw_rect(stats_x + 720, stats_y - 5, stats_x + 840, stats_y + 35, COLOR_SURFACE, 1.0f);
+    draw_border(stats_x + 720, stats_y - 5, stats_x + 840, stats_y + 35, COLOR_CORAL, 0.40f);
+    draw_string(stats_x + 750, stats_y + 10, "SHUTDOWN", COLOR_CORAL);
 }
 
 int main() {
-    printf("[-] Initializing FateOS GUI Desktop Engine...\n");
+    printf("[-] Initializing Editorial Dark FateOS GUI...\n");
 
     // Open Framebuffer device
     fbfd = open("/dev/fb0", O_RDWR);
@@ -410,25 +460,21 @@ int main() {
     struct fb_fix_screeninfo finfo;
 
     if (ioctl(fbfd, FBIOGET_VSCREENINFO, &vinfo) < 0) {
-        perror("[!] Error: Reading variable screen information");
+        perror("[!] Error: Reading variable screen info");
         close(fbfd);
         return 1;
     }
     if (ioctl(fbfd, FBIOGET_FSCREENINFO, &finfo) < 0) {
-        perror("[!] Error: Reading fixed screen information");
+        perror("[!] Error: Reading fixed screen info");
         close(fbfd);
         return 1;
     }
 
-    // Capture screen dimensions
     width = vinfo.xres;
     height = vinfo.yres;
-    line_len = finfo.line_length / 4; // 32-bit pixel offset
-
+    line_len = finfo.line_length / 4;
     long int screensize = finfo.smem_len;
-    printf("[+] Display Mode: %dx%d (%d-bits per pixel)\n", width, height, vinfo.bits_per_pixel);
 
-    // Map framebuffer to memory
     fb_mem = (uint32_t *)mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, 0);
     if (fb_mem == MAP_FAILED) {
         perror("[!] Error: Failed to memory-map framebuffer");
@@ -436,85 +482,134 @@ int main() {
         return 1;
     }
 
-    // Allocate back buffer for double-buffering (flicker-free rendering)
     back_buffer = (uint32_t *)malloc(screensize);
     if (!back_buffer) {
-        perror("[!] Error: Failed to allocate memory back-buffer");
+        perror("[!] Error: Back buffer allocation failed");
         munmap(fb_mem, screensize);
         close(fbfd);
         return 1;
     }
 
-    // Render the static desktop components to back buffer
-    render_desktop();
-
-    // Copy static frame to display
+    // Render portfolio desktop template once to back buffer
+    render_portfolio_desktop();
     memcpy(fb_mem, back_buffer, screensize);
 
-    // Open mouse device file
+    // Open mouse relative device file
     int mouse_fd = open("/dev/input/mice", O_RDONLY | O_NONBLOCK);
     if (mouse_fd < 0) {
-        printf("[!] Warning: /dev/input/mice not found. Running headlessly without mouse pointer.\n");
+        printf("[!] Warning: /dev/input/mice not found.\n");
     }
 
-    // Initial mouse coordinates (centered)
+    // Coordinates for the dual cursor system
     int mx = width / 2;
     int my = height / 2;
+    float rx = mx;
+    float ry = my;
 
-    printf("[+] Desktop GUI Active. Move mouse or press Ctrl+C in terminal to exit.\n");
+    // Cursor size parameters (Saturates based on hover states)
+    float ring_size = 40.0f;
+    float target_size = 40.0f;
+    uint32_t ring_color = COLOR_TAUPE;
 
-    // Main interaction loop
+    printf("[+] Website UI active on Framebuffer. Exit via mouse click on SHUTDOWN or Ctrl+C.\n");
+
     signed char mouse_data[3];
     while (1) {
-        int mouse_updated = 0;
-        
+        int is_hovering = 0;
+
         if (mouse_fd >= 0) {
             int bytes = read(mouse_fd, mouse_data, sizeof(mouse_data));
             if (bytes == 3) {
-                // Parse relative PS/2 packets
                 int dx = mouse_data[1];
                 int dy = mouse_data[2];
-                
                 mx += dx;
-                my -= dy; // Y axis is inverted on PS/2 mouse protocols
+                my -= dy; // relative vertical is inverted
 
-                // Check button click on "EXIT" dock item to shut down
-                int btn_left = mouse_data[0] & 0x1;
-                if (btn_left) {
-                    // Check if mouse click coordinates are inside the "EXIT" item in the dock
-                    int dock_w = 400;
-                    int dock_h = 56;
-                    int dock_x = (width - dock_w) / 2;
-                    int dock_y = height - dock_h - 30;
-                    int exit_btn_x1 = dock_x + 320;
-                    int exit_btn_x2 = dock_x + dock_w - 20;
-                    int exit_btn_y1 = dock_y + 10;
-                    int exit_btn_y2 = dock_y + dock_h - 10;
-                    if (mx >= exit_btn_x1 && mx <= exit_btn_x2 && my >= exit_btn_y1 && my <= exit_btn_y2) {
-                        printf("[-] Exit button clicked! Triggering clean poweroff...\n");
-                        system("poweroff -f");
-                    }
-                }
-
-                // Clamp mouse coordinates to screen boundaries
+                // Clamp actual cursor position
                 if (mx < 0) mx = 0;
                 if (mx >= width) mx = width - 1;
                 if (my < 0) my = 0;
                 if (my >= height) my = height - 1;
 
-                mouse_updated = 1;
+                // Handle click actions
+                int left_click = mouse_data[0] & 0x1;
+                if (left_click) {
+                    // Check if clicked the SHUTDOWN stats block button
+                    int shutdown_x1 = 80 + 720;
+                    int shutdown_x2 = shutdown_x1 + 120;
+                    int shutdown_y1 = 570 - 5;
+                    int shutdown_y2 = shutdown_y1 + 40;
+                    if (mx >= shutdown_x1 && mx <= shutdown_x2 && my >= shutdown_y1 && my <= shutdown_y2) {
+                        printf("[-] Shutting down virtual machine cleanly...\n");
+                        system("poweroff -f");
+                    }
+                }
             }
         }
 
-        // Draw cursor smoothly on top of display (Double-buffered copying)
-        memcpy(fb_mem, back_buffer, screensize);
-        draw_cursor(mx, my);
+        // Hover detection: Check if mouse cursor is within interactive elements bounding boxes
+        // 1. Navigation items / button
+        if (my >= 10 && my <= 60) {
+            if (mx >= 50 && mx <= 120) is_hovering = 1; // Logo
+            if (mx >= 500 && mx <= 1015) is_hovering = 1; // links and Talk CTA button
+        }
+        // 2. Download CV button
+        if (mx >= 80 && mx <= 240 && my >= 450 && my <= 490) {
+            is_hovering = 1;
+        }
+        // 3. Rotating badge widget
+        int badge_dx = mx - 800;
+        int badge_dy = my - 340;
+        if (badge_dx * badge_dx + badge_dy * badge_dy <= 90 * 90) {
+            is_hovering = 1;
+        }
+        // 4. Shutdown stats button
+        int shutdown_x1 = 80 + 720;
+        int shutdown_x2 = shutdown_x1 + 120;
+        int shutdown_y1 = 570 - 5;
+        int shutdown_y2 = shutdown_y1 + 40;
+        if (mx >= shutdown_x1 && mx <= shutdown_x2 && my >= shutdown_y1 && my <= shutdown_y2) {
+            is_hovering = 1;
+        }
 
-        // Sleep to throttle frame rate (~60 FPS) and CPU usage
-        usleep(16666); 
+        // Apply interactive cursor physics (expansion and color shifts on hover)
+        if (is_hovering) {
+            target_size = 60.0f;
+            ring_color = COLOR_CORAL; // Changes color to coral on hover
+        } else {
+            target_size = 40.0f;
+            ring_color = COLOR_TAUPE; // Default warm taupe
+        }
+
+        // Smooth animations (cubic-bezier equivalent linear lerp with lag)
+        rx += (mx - rx) * 0.15f; // Ring X coordinates with lag
+        ry += (my - ry) * 0.15f; // Ring Y coordinates with lag
+        ring_size += (target_size - ring_size) * 0.15f; // Ring size expansion/shrinkage
+
+        // Copy clean frame template to video RAM
+        memcpy(fb_mem, back_buffer, screensize);
+
+        // Render Cursor System on top of the display screen
+        // Draw the 40px/60px outlined ring with 1px border
+        draw_circle_outline((int)rx, (int)ry, (int)(ring_size / 2.0f), ring_color, 1.0f);
+        
+        // Draw the 8px solid cursor dot (R=4) with mix-blend-mode equivalent (simply draw it solid)
+        for (int cy = -4; cy <= 4; cy++) {
+            for (int cx = -4; cx <= 4; cx++) {
+                int px = mx + cx;
+                int py = my + cy;
+                if (px >= 0 && px < width && py >= 0 && py < height) {
+                    if (cx * cx + cy * cy <= 16) {
+                        fb_mem[py * line_len + px] = COLOR_TAUPE;
+                    }
+                }
+            }
+        }
+
+        // Throttle frame loop (~60 FPS) to optimize CPU cycles
+        usleep(16666);
     }
 
-    // Cleanup resources
     free(back_buffer);
     munmap(fb_mem, screensize);
     close(fbfd);
