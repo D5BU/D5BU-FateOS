@@ -102,7 +102,14 @@ cp "${WORKSPACE_DIR}/src/welcome.txt" "${ROOTFS}/welcome.txt"
 
 # Compile the custom Framebuffer GUI statically
 echo "[-] Compiling custom Framebuffer GUI statically..."
-gcc -static -O3 -Wall "${WORKSPACE_DIR}/src/gui.c" -lm -o "${ROOTFS}/bin/fateos-gui"
+gcc -static -O3 -Wall \
+    "${WORKSPACE_DIR}/src/gui/main.c" \
+    "${WORKSPACE_DIR}/src/gui/core.c" \
+    "${WORKSPACE_DIR}/src/gui/input.c" \
+    "${WORKSPACE_DIR}/src/gui/fatedm.c" \
+    "${WORKSPACE_DIR}/src/gui/fatede.c" \
+    "${WORKSPACE_DIR}/src/gui/apps/"*.c \
+    -lm -o "${ROOTFS}/bin/fateos-gui"
 
 # Copy the DHCP helper script
 echo "[-] Copying DHCP configuration helper..."

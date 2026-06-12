@@ -98,8 +98,8 @@ if [ -c /dev/fb0 ]; then
     echo "[-] Starting website-themed FateOS GUI..."
     (
         while true; do
-            fateos-gui
-            echo "GUI exited. Restarting in 1 second..."
+            fateos-gui >/tmp/gui.log 2>&1
+            echo "GUI exited with code $?. Restarting in 1 second..." >>/tmp/gui.log
             sleep 1
         done
     ) &
